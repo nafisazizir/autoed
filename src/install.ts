@@ -1,9 +1,8 @@
 import { chmodSync, copyFileSync, existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { loginUser } from "./backends/discover.ts";
 import { join, resolve } from "node:path";
 import { APP_ID, type Paths } from "./config.ts";
-import { runCapture } from "./backends/discover.ts";
+import { loginUser, runCapture } from "./backends/discover.ts";
 
 function plistPath() { return join(homedir(), "Library", "LaunchAgents", `${APP_ID}.plist`); }
 
