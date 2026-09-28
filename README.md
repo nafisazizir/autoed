@@ -118,6 +118,9 @@ Binary lookup order: `config` → `PATH` → `~/.local/bin` → `/opt/homebrew/b
   "json_schema": null,
   "add_dirs": [],
   "sandbox": false,
+  "chrome": false,
+  "allowed_tools": [],
+  "disallowed_tools": [],
   "triggers": [
     { "kind": "schedule", "config": { "cron": "0 9 * * 1-5", "tz": "Australia/Sydney" } },
     { "kind": "webhook" },
@@ -139,6 +142,9 @@ Binary lookup order: `config` → `PATH` → `~/.local/bin` → `/opt/homebrew/b
 | `json_schema` | Claude only, structured output |
 | `add_dirs` | Claude only, extra `--add-dir` directories (`~` is expanded) |
 | `sandbox` | Devin only |
+| `chrome` | Claude only, `--chrome` (Claude in Chrome: drives your real browser) |
+| `allowed_tools` | Claude only, `--allowedTools` rules, e.g. `"Bash(git log:*)"` |
+| `disallowed_tools` | Claude only, `--disallowedTools` rules, e.g. `"Bash(gh pr merge:*)"` |
 
 Prompt template variables: `{{trigger.kind}}`, `{{event.payload}}`, `{{event.occurred_at}}`, `{{catchup.missed_count}}`, `{{run.id}}`, `{{run.short_id}}`, `{{automation.name}}`, `{{automation.metadata}}`, `{{now}}`. The rendered prompt is saved to `runs/<id>/prompt.md`.
 

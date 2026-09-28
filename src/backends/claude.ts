@@ -85,6 +85,11 @@ export class ClaudeBackend implements Backend {
     if (ctx.resumeSessionId) argv.push("--resume", ctx.resumeSessionId);
     const addDirs: string[] = a.add_dirs ? JSON.parse(a.add_dirs) : [];
     if (addDirs.length) argv.push("--add-dir", ...addDirs);
+    const allowed: string[] = a.allowed_tools ? JSON.parse(a.allowed_tools) : [];
+    const disallowed: string[] = a.disallowed_tools ? JSON.parse(a.disallowed_tools) : [];
+    if (allowed.length) argv.push("--allowedTools", ...allowed);
+    if (disallowed.length) argv.push("--disallowedTools", ...disallowed);
+    if (a.chrome) argv.push("--chrome");
     return { argv, env: scrubbedEnv(), cwd: run.worktree_path ?? run.working_dir, stdin: prompt };
   }
 

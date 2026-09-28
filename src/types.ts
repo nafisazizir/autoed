@@ -35,6 +35,9 @@ export interface Automation {
   json_schema: string | null;
   add_dirs: string | null; // JSON string[]
   sandbox: number;
+  chrome: number;
+  allowed_tools: string | null; // JSON string[]
+  disallowed_tools: string | null; // JSON string[]
 }
 
 export interface Trigger {
@@ -106,6 +109,9 @@ export interface AutomationInput {
   json_schema?: unknown;
   add_dirs?: string[];
   sandbox?: boolean;
+  chrome?: boolean;
+  allowed_tools?: string[];
+  disallowed_tools?: string[];
   triggers?: Array<{ id?: string; kind: TriggerKind; config?: Record<string, unknown>; enabled?: boolean }>;
 }
 

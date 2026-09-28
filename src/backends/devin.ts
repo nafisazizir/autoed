@@ -98,6 +98,7 @@ export class DevinBackend implements Backend {
     argv.push("--respect-workspace-trust", "false");
     argv.push("--export", join(ctx.runDir, "transcript.atif.json"));
     if (a.sandbox) argv.push("--sandbox");
+    for (const [k, on] of [["chrome", !!a.chrome], ["allowed_tools", !!a.allowed_tools], ["disallowed_tools", !!a.disallowed_tools]] as const) if (on) ctx.warn(`${k} is Claude-only and is ignored for devin`);
     if (ctx.resumeSessionId) argv.push("--resume", ctx.resumeSessionId);
     return { argv, env: scrubbedEnv(), cwd: run.worktree_path ?? run.working_dir };
   }

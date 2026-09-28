@@ -19,9 +19,11 @@ const EMPTY = {
   name: "", enabled: true, backend: "devin", model: "", agent_mode: "", agent_profile: "", instructions: "", working_dir: "",
   isolate_worktree: false, continue_session: false, mcp_config: "", timeout_sec: 3600, max_concurrent: 1, rate_limit_count: "", rate_limit_window_sec: "",
   catchup_policy: "coalesce", notify_macos: true, notify_webhook_url: "", notify_webhook_template: "generic", metadata: "", json_schema: "", add_dirs: "", sandbox: false,
+  chrome: false, allowed_tools: "", disallowed_tools: "",
 };
 
 const DEFAULT = "__default";
+const lines = (s: string) => s.split("\n").map((l) => l.trim()).filter(Boolean);
 const GITHUB_EVENTS = ["issue", "issue_comment", "pull_request", "pr_review", "push", "check_run"];
 const TRIGGER_META = {
   schedule: { label: "Schedule", Icon: IconClock },
@@ -62,7 +64,8 @@ export function AutomationForm({ id }: { id?: string }) {
     if (id) get(`/api/automations/${id}`).then((a) => {
       const notify = a.notify ? JSON.parse(a.notify) : {};
       setF({ ...EMPTY, ...a, model: a.model ?? "", agent_mode: a.agent_mode ?? "", agent_profile: a.agent_profile ?? "", mcp_config: a.mcp_config ?? "", rate_limit_count: a.rate_limit_count ?? "", rate_limit_window_sec: a.rate_limit_window_sec ?? "",
-        notify_macos: notify.macos ?? true, notify_webhook_url: notify.webhook?.url ?? "", notify_webhook_template: notify.webhook?.template ?? "generic", metadata: a.metadata ? JSON.stringify(JSON.parse(a.metadata), null, 2) : "", json_schema: a.json_schema ?? "", add_dirs: a.add_dirs ? JSON.parse(a.add_dirs).join("\n") : "", enabled: !!a.enabled, isolate_worktree: !!a.isolate_worktree, continue_session: !!a.continue_session, sandbox: !!a.sandbox });
+        notify_macos: notify.macos ?? true, notify_webhook_url: notify.webhook?.url ?? "", notify_webhook_template: notify.webhook?.template ?? "generic", metadata: a.metadata ? JSON.stringify(JSON.parse(a.metadata), null, 2) : "", json_schema: a.json_schema ?? "", add_dirs: a.add_dirs ? JSON.parse(a.add_dirs).join("\n") : "", enabled: !!a.enabled, isolate_worktree: !!a.isolate_worktree, continue_session: !!a.continue_session, sandbox: !!a.sandbox,
+        chrome: !!a.chrome, allowed_tools: a.allowed_tools ? JSON.parse(a.allowed_tools).join("\n") : "", disallowed_tools: a.disallowed_tools ? JSON.parse(a.disallowed_tools).join("\n") : "" });
       setTriggers(a.triggers.map((t: any) => ({ id: t.id, kind: t.kind, config: t.config ?? {}, enabled: !!t.enabled })));
     }).catch(notifyError);
   }, [id]);
@@ -87,6 +90,7 @@ export function AutomationForm({ id }: { id?: string }) {
     rate_limit_count: f.rate_limit_count ? Number(f.rate_limit_count) : null, rate_limit_window_sec: f.rate_limit_window_sec ? Number(f.rate_limit_window_sec) : null,
     catchup_policy: f.catchup_policy, notify: { macos: f.notify_macos, ...(f.notify_webhook_url ? { webhook: { url: f.notify_webhook_url, template: f.notify_webhook_template } } : {}) },
     metadata: f.metadata ? JSON.parse(f.metadata) : null, json_schema: f.json_schema || null, add_dirs: f.add_dirs.split("\n").map((s: string) => s.trim()).filter(Boolean), sandbox: f.sandbox,
+    chrome: f.chrome, allowed_tools: lines(f.allowed_tools), disallowed_tools: lines(f.disallowed_tools),
     triggers: triggers.filter((t) => t.kind !== "manual"),
   });
   const save = async () => {
@@ -340,6 +344,19 @@ export function AutomationForm({ id }: { id?: string }) {
                 <Textarea id="add-dirs" className="min-h-16 text-copy-13-mono" value={f.add_dirs} onChange={(e) => set("add_dirs", e.target.value)} />
                 <Hint>One per line. <Code>--add-dir</Code></Hint>
               </Field>
+              <Grid>
+                <Field>
+                  <FieldLabel htmlFor="allowed-tools">Allowed tools</FieldLabel>
+                  <Textarea id="allowed-tools" className="min-h-16 text-copy-13-mono" value={f.allowed_tools} onChange={(e) => set("allowed_tools", e.target.value)} placeholder="Bash(git log:*)" />
+                  <Hint>One rule per line. <Code>--allowedTools</Code></Hint>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="disallowed-tools">Disallowed tools</FieldLabel>
+                  <Textarea id="disallowed-tools" className="min-h-16 text-copy-13-mono" value={f.disallowed_tools} onChange={(e) => set("disallowed_tools", e.target.value)} placeholder="Bash(gh pr merge:*)" />
+                  <Hint>One rule per line. <Code>--disallowedTools</Code></Hint>
+                </Field>
+              </Grid>
+              <SwitchField id="chrome" checked={f.chrome} onChange={(v) => set("chrome", v)} label="Claude in Chrome" description={<><Code>--chrome</Code>: the agent can drive your Chrome browser.</>} />
             </>}
             <Field>
               <FieldLabel htmlFor="metadata">Metadata</FieldLabel>

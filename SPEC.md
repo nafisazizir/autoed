@@ -67,7 +67,7 @@ Verified on the development Mac on 2026-09-25 (macOS 26.6.2, Claude Code 2.1.282
 ### 4.1 Claude Code
 
 - Headless: `claude -p "<prompt>" --output-format json` prints one JSON result and exits. `--output-format stream-json` streams events.
-- Useful flags: `--session-id <uuid>`, `--name <display name>`, `--model`, `--agent`, `--mcp-config`, `--permission-mode`, `--permission-prompts none`, `--json-schema`, `--resume <id>`, `--add-dir`, `--max-budget-usd` (irrelevant on subscription).
+- Useful flags: `--session-id <uuid>`, `--name <display name>`, `--model`, `--agent`, `--mcp-config`, `--permission-mode`, `--permission-prompts none`, `--json-schema`, `--resume <id>`, `--add-dir`, `--allowedTools <rules...>`, `--disallowedTools <rules...>` (e.g. `"Bash(git log:*)"`), `--chrome` (Claude in Chrome integration), `--max-budget-usd` (irrelevant on subscription).
 - Auth: the CLI reads the OAuth login from the macOS login keychain item "Claude Code-credentials". No key handling by autoed. If `ANTHROPIC_API_KEY` is present in the environment, the CLI silently bills API credits instead. autoed must launch with a scrubbed environment.
 - Sessions are written to `~/.claude/projects/<encoded-cwd>/<session-id>.jsonl`.
 - Nested launch: Claude Code refuses to start inside another Claude Code session unless `CLAUDECODE` is unset. autoed unsets it defensively.
@@ -143,7 +143,11 @@ automations (
   rate_limit_count INT, rate_limit_window_sec INT,   -- like Devin's "50 per 1 hour"
   catchup_policy TEXT,      -- 'coalesce' | 'replay' | 'skip'
   notify TEXT,              -- JSON: { macos: true, webhook: {url, template} }
-  metadata TEXT             -- JSON key-value, like Devin's Metadata
+  metadata TEXT,            -- JSON key-value, like Devin's Metadata
+  json_schema TEXT, add_dirs TEXT,   -- claude only: --json-schema, --add-dir (JSON string[])
+  sandbox INT,              -- devin only: --sandbox
+  chrome INT,               -- claude only: --chrome (Claude in Chrome integration)
+  allowed_tools TEXT, disallowed_tools TEXT   -- claude only: JSON string[] of permission rules, --allowedTools / --disallowedTools
 )
 
 triggers (
@@ -224,7 +228,7 @@ argv: claude -p --output-format json
         --permission-mode <agent_mode>            # default 'acceptEdits'; 'bypassPermissions' opt-in with warning
         --permission-prompts none
         [--json-schema <schema>] [--resume <last_session_id>]   # resume only when continue_session=1
-        [--add-dir ...]
+        [--add-dir ...] [--allowedTools <rule>...] [--disallowedTools <rule>...] [--chrome]
 prompt: passed on stdin (avoids argv length limits and shell quoting)
 env:    minimal PATH, HOME, USER, LANG, TMPDIR. Explicitly NOT forwarded: ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, ANTHROPIC_BASE_URL, CLAUDE_CODE_OAUTH_TOKEN, CLAUDECODE, CLAUDE_CODE_ENTRYPOINT
 models: fixed list from settings (opus, sonnet, haiku aliases) plus free text; there is no subscription-scoped model listing command
@@ -241,7 +245,7 @@ argv:   devin -p --prompt-file <run_dir>/prompt.md
           --permission-mode <agent_mode>           # default 'accept-edits'; 'dangerous' opt-in with warning
           --respect-workspace-trust false
           --export <run_dir>/transcript.atif.json
-          [--sandbox] [--resume <last_session_id>]
+          [--sandbox] [--resume <last_session_id>]   # chrome/allowed_tools/disallowed_tools are ignored with a run warning
 cwd:    working_dir (or worktree)
 models: `devin models list --format json`, cached 24 h; `cost_tier == 'Free'` marked free
 session id: read after exit from sessions.db (newest row with matching working_directory and created_at >= run.started_at) or from the export file
