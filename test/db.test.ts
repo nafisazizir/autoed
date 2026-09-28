@@ -65,3 +65,14 @@ describe("db claude cli options", () => {
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 });
+
+describe("db path expansion", () => {
+  test("expands ~ in working_dir and add_dirs on create and update", () => withDb((db) => {
+    const home = process.env.HOME!;
+    const a = db.createAutomation({ name: "t", backend: "claude", instructions: "", working_dir: "~/proj", add_dirs: ["~", "~/other", "/abs", "a~b"] });
+    expect(a.working_dir).toBe(`${home}/proj`);
+    expect(JSON.parse(a.add_dirs!)).toEqual([home, `${home}/other`, "/abs", "a~b"]);
+    expect(db.updateAutomation(a.id, { working_dir: "~" }).working_dir).toBe(home);
+    expect(db.updateAutomation(a.id, { working_dir: "~user/x" }).working_dir).toBe("~user/x");
+  }));
+});

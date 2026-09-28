@@ -1,4 +1,5 @@
 import { Database } from "bun:sqlite";
+import { homedir } from "node:os";
 import type { Automation, AutomationInput, Event, Run, RunStatus, Trigger, TriggerKind } from "./types.ts";
 import { newId, newSecret, nowIso } from "./ids.ts";
 
@@ -119,7 +120,7 @@ export class Db {
     if (has("agent_mode")) c.agent_mode = input.agent_mode || null;
     if (has("agent_profile")) c.agent_profile = input.agent_profile || null;
     if (has("instructions")) c.instructions = input.instructions ?? "";
-    if (has("working_dir")) c.working_dir = req(input.working_dir, "working_dir");
+    if (has("working_dir")) c.working_dir = expandHome(req(input.working_dir, "working_dir"));
     if (has("isolate_worktree")) c.isolate_worktree = input.isolate_worktree ? 1 : 0;
     if (has("continue_session")) c.continue_session = input.continue_session ? 1 : 0;
     if (has("mcp_config")) c.mcp_config = jsonOrNull(input.mcp_config);
@@ -135,7 +136,7 @@ export class Db {
     if (has("notify")) c.notify = jsonOrNull(input.notify);
     if (has("metadata")) c.metadata = jsonOrNull(input.metadata);
     if (has("json_schema")) c.json_schema = jsonOrNull(input.json_schema);
-    if (has("add_dirs")) c.add_dirs = input.add_dirs?.length ? JSON.stringify(input.add_dirs) : null;
+    if (has("add_dirs")) c.add_dirs = input.add_dirs?.length ? JSON.stringify(input.add_dirs.map(expandHome)) : null;
     if (has("sandbox")) c.sandbox = input.sandbox ? 1 : 0;
     if (has("chrome")) c.chrome = input.chrome ? 1 : 0;
     if (has("allowed_tools")) c.allowed_tools = toolList(input.allowed_tools, "allowed_tools");
@@ -256,6 +257,8 @@ function toolList(v: unknown, name: string): string | null {
   const tools = v.map((t: string) => t.trim()).filter(Boolean);
   return tools.length ? JSON.stringify(tools) : null;
 }
+/** Expands a leading ~ so paths work whether the automation came from the API, the UI, or `autoed add` with the engine offline. */
+export function expandHome(p: string): string { return p.replace(/^~(?=\/|$)/, process.env.HOME || homedir()); }
 function jsonOrNull(v: unknown): string | null {
   if (v === undefined || v === null || v === "") return null;
   if (typeof v === "string") { JSON.parse(v); return v; }

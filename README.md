@@ -101,26 +101,26 @@ Binary lookup order: `config` → `PATH` → `~/.local/bin` → `/opt/homebrew/b
 ```json
 {
   "name": "Issue triage",
-  "backend": "claude",                 // "claude" | "devin"
-  "model": "sonnet",                   // backend model id; Devin free tier is swe-2-high / -medium / -max
-  "agent_mode": "acceptEdits",         // claude: acceptEdits|auto|dontAsk|plan|bypassPermissions  devin: accept-edits|auto|smart|dangerous
+  "backend": "claude",
+  "model": "sonnet",
+  "agent_mode": "acceptEdits",
   "instructions": "…prompt template…",
   "working_dir": "~/Projects/app",
-  "isolate_worktree": false,           // git worktree per run under ~/.autoed/worktrees
-  "continue_session": false,           // --resume the last successful session
+  "isolate_worktree": false,
+  "continue_session": false,
   "timeout_sec": 3600,
   "max_concurrent": 1,
   "rate_limit_count": 50, "rate_limit_window_sec": 3600,
-  "catchup_policy": "coalesce",        // coalesce | replay | skip
+  "catchup_policy": "coalesce",
   "notify": { "macos": true, "webhook": { "url": "…", "template": "slack" } },
   "metadata": { "team": "platform" },
-  "mcp_config": { "mcpServers": {} },  // claude only
-  "json_schema": null,                 // claude only, structured output
-  "add_dirs": [],                      // claude only
-  "sandbox": false,                    // devin only
-  "chrome": false,                     // claude only, --chrome (Claude in Chrome: drives your real browser)
-  "allowed_tools": [],                 // claude only, --allowedTools rules, e.g. "Bash(git log:*)"
-  "disallowed_tools": [],              // claude only, --disallowedTools rules, e.g. "Bash(gh pr merge:*)"
+  "mcp_config": { "mcpServers": {} },
+  "json_schema": null,
+  "add_dirs": [],
+  "sandbox": false,
+  "chrome": false,
+  "allowed_tools": [],
+  "disallowed_tools": [],
   "triggers": [
     { "kind": "schedule", "config": { "cron": "0 9 * * 1-5", "tz": "Australia/Sydney" } },
     { "kind": "webhook" },
@@ -128,6 +128,23 @@ Binary lookup order: `config` → `PATH` → `~/.local/bin` → `/opt/homebrew/b
   ]
 }
 ```
+
+| Field | Notes |
+| --- | --- |
+| `backend` | `"claude"` or `"devin"` |
+| `model` | Backend model id; Devin free tier is `swe-2-high` / `-medium` / `-max` |
+| `agent_mode` | claude: `acceptEdits` \| `auto` \| `dontAsk` \| `plan` \| `bypassPermissions`; devin: `accept-edits` \| `auto` \| `smart` \| `dangerous` |
+| `working_dir` | A leading `~` is expanded to your home directory |
+| `isolate_worktree` | Git worktree per run under `~/.autoed/worktrees` |
+| `continue_session` | `--resume` the last successful session |
+| `catchup_policy` | `coalesce` \| `replay` \| `skip` |
+| `mcp_config` | Claude only |
+| `json_schema` | Claude only, structured output |
+| `add_dirs` | Claude only, extra `--add-dir` directories (`~` is expanded) |
+| `sandbox` | Devin only |
+| `chrome` | Claude only, `--chrome` (Claude in Chrome: drives your real browser) |
+| `allowed_tools` | Claude only, `--allowedTools` rules, e.g. `"Bash(git log:*)"` |
+| `disallowed_tools` | Claude only, `--disallowedTools` rules, e.g. `"Bash(gh pr merge:*)"` |
 
 Prompt template variables: `{{trigger.kind}}`, `{{event.payload}}`, `{{event.occurred_at}}`, `{{catchup.missed_count}}`, `{{run.id}}`, `{{run.short_id}}`, `{{automation.name}}`, `{{automation.metadata}}`, `{{now}}`. The rendered prompt is saved to `runs/<id>/prompt.md`.
 
