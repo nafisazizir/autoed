@@ -103,7 +103,8 @@ export class DevinBackend implements Backend {
   }
 
   async parseResult(run: Run, stdout: string, stderr: string, exitCode: number | null, ctx: BuildContext): Promise<ParsedResult> {
-    const rl = detectRateLimit("devin", `${stderr}\n${stdout.slice(-4000)}`);
+    // stdout is agent output: only scan it when the run failed, so a successful run mentioning "429" is not requeued.
+    const rl = detectRateLimit("devin", exitCode === 0 ? stderr : `${stderr}\n${stdout.slice(-4000)}`);
     const sessionId = this.findSessionId(run) ?? (await this.sessionIdFromExport(join(ctx.runDir, "transcript.atif.json")));
     if (rl) return { ok: false, sessionId, rateLimited: rl, error: rl.message };
     const ok = exitCode === 0;

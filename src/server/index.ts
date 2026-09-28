@@ -191,9 +191,7 @@ function validateInput(body: any, partial = false): AutomationInput {
     }
   }
   if (!partial || body.working_dir !== undefined) {
-    const wd = String(body.working_dir ?? "").replace(/^~(?=\/|$)/, process.env.HOME ?? "~");
-    if (!wd) throw new Error("working_dir is required");
-    body.working_dir = wd;
+    if (!String(body.working_dir ?? "").trim()) throw new Error("working_dir is required"); // ~ is expanded in db.automationColumns
   }
   return body as AutomationInput;
 }

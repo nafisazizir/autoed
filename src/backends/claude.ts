@@ -98,7 +98,9 @@ export class ClaudeBackend implements Backend {
     }
     const sessionId = json?.session_id ?? run.session_id ?? undefined;
     const resultText: string = typeof json?.result === "string" ? json.result : "";
-    const rl = detectRateLimit("claude", `${resultText}\n${stderr}\n${json?.is_error ? JSON.stringify(json) : ""}`);
+    // Only failed runs can be rate-limited: a successful result that merely mentions "429" or "rate limit" is agent output.
+    const failed = exitCode !== 0 || !json || !!json.is_error;
+    const rl = failed ? detectRateLimit("claude", `${json ? resultText : exitCode !== 0 ? trimmed.slice(-4000) : ""}\n${stderr}\n${json?.is_error ? JSON.stringify(json) : ""}`) : null;
     if (rl) return { ok: false, sessionId, rateLimited: rl, error: rl.message };
     if (json) {
       const ok = exitCode === 0 && !json.is_error;
