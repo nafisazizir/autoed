@@ -23,6 +23,10 @@ export function scrubbedEnv(extra: Record<string, string> = {}): Record<string, 
   for (const k of ALLOWED_ENV) if (process.env[k] !== undefined) env[k] = process.env[k]!;
   env.PATH = standardPath();
   env.HOME ??= homedir();
+  // launchd starts the engine without USER/LOGNAME; claude needs USER to find its keychain login.
+  const user = loginUser();
+  if (user) { env.USER ??= user; env.LOGNAME ??= user; }
+  env.SHELL ??= "/bin/zsh";
   env.TERM ??= "dumb";
   env.LANG ??= "en_US.UTF-8";
   Object.assign(env, extra);
@@ -30,6 +34,15 @@ export function scrubbedEnv(extra: Record<string, string> = {}): Record<string, 
   env.CI = "1";
   env.NO_COLOR = "1";
   return env;
+}
+
+let cachedUser: string | null | undefined;
+/** The login name, from the OS rather than the environment (Bun's os.userInfo() reads $USER and says "unknown" under launchd). */
+export function loginUser(): string | null {
+  if (cachedUser !== undefined) return cachedUser;
+  if (process.env.USER) return (cachedUser = process.env.USER);
+  try { const r = Bun.spawnSync(["/usr/bin/id", "-un"], { stdout: "pipe", stderr: "ignore", env: {} }); const u = r.stdout.toString().trim(); if (r.exitCode === 0 && u) return (cachedUser = u); } catch {}
+  return (cachedUser = null);
 }
 
 export function isExecutable(p: string | undefined | null): p is string {
