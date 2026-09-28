@@ -1,6 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
-import { get, post, put } from "../api";
-import { nav, useToast } from "../App";
+import { IconAlertTriangle, IconBrandGithub, IconClock, IconPlayerPlay, IconPlus, IconTrash, IconWebhook } from "@tabler/icons-react";
+import { get, post, put } from "@/lib/api";
+import { notify, notifyError } from "@/lib/notify";
+import { nav } from "@/lib/router";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Field, FieldContent, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
+import { Picker } from "@/components/picker";
+import { CodeView, Ledger, Mono, Notice, Page, PageHeader, Panel, Section } from "@/components/page";
 
 type Trigger = { id?: string; kind: "schedule" | "webhook" | "github" | "manual"; config: any; enabled?: boolean };
 
@@ -10,8 +21,34 @@ const EMPTY = {
   catchup_policy: "coalesce", notify_macos: true, notify_webhook_url: "", notify_webhook_template: "generic", metadata: "", json_schema: "", add_dirs: "", sandbox: false,
 };
 
+const DEFAULT = "__default";
+const GITHUB_EVENTS = ["issue", "issue_comment", "pull_request", "pr_review", "push", "check_run"];
+const TRIGGER_META = {
+  schedule: { label: "Schedule", Icon: IconClock },
+  webhook: { label: "Webhook", Icon: IconWebhook },
+  github: { label: "GitHub, polled", Icon: IconBrandGithub },
+  manual: { label: "Manual", Icon: IconPlayerPlay },
+} as const;
+
+const Code = ({ children }: { children: React.ReactNode }) => <code className="text-copy-13-mono text-gray-1000">{children}</code>;
+const Hint = ({ children }: { children: React.ReactNode }) => <FieldDescription className="text-copy-13">{children}</FieldDescription>;
+
+/** A boolean setting: its label and a line of explanation, the switch at the end. */
+function SwitchField({ id, checked, onChange, label, description }: { id: string; checked: boolean; onChange: (v: boolean) => void; label: React.ReactNode; description?: React.ReactNode }) {
+  return (
+    <Field orientation="horizontal">
+      <FieldContent>
+        <FieldLabel htmlFor={id}>{label}</FieldLabel>
+        {description && <Hint>{description}</Hint>}
+      </FieldContent>
+      <Switch id={id} checked={checked} onCheckedChange={onChange} />
+    </Field>
+  );
+}
+
+const Grid = ({ children }: { children: React.ReactNode }) => <div className="grid gap-x-3 gap-y-6 sm:grid-cols-2">{children}</div>;
+
 export function AutomationForm({ id }: { id?: string }) {
-  const toast = useToast();
   const [f, setF] = useState<any>(EMPTY);
   const [triggers, setTriggers] = useState<Trigger[]>([]);
   const [backends, setBackends] = useState<any[]>([]);
@@ -21,21 +58,22 @@ export function AutomationForm({ id }: { id?: string }) {
   const set = (k: string, v: any) => setF((s: any) => ({ ...s, [k]: v }));
 
   useEffect(() => {
-    get("/api/backends").then((b) => setBackends(b.backends)).catch((e) => toast(e.message, true));
+    get("/api/backends").then((b) => setBackends(b.backends)).catch(notifyError);
     if (id) get(`/api/automations/${id}`).then((a) => {
       const notify = a.notify ? JSON.parse(a.notify) : {};
       setF({ ...EMPTY, ...a, model: a.model ?? "", agent_mode: a.agent_mode ?? "", agent_profile: a.agent_profile ?? "", mcp_config: a.mcp_config ?? "", rate_limit_count: a.rate_limit_count ?? "", rate_limit_window_sec: a.rate_limit_window_sec ?? "",
         notify_macos: notify.macos ?? true, notify_webhook_url: notify.webhook?.url ?? "", notify_webhook_template: notify.webhook?.template ?? "generic", metadata: a.metadata ? JSON.stringify(JSON.parse(a.metadata), null, 2) : "", json_schema: a.json_schema ?? "", add_dirs: a.add_dirs ? JSON.parse(a.add_dirs).join("\n") : "", enabled: !!a.enabled, isolate_worktree: !!a.isolate_worktree, continue_session: !!a.continue_session, sandbox: !!a.sandbox });
       setTriggers(a.triggers.map((t: any) => ({ id: t.id, kind: t.kind, config: t.config ?? {}, enabled: !!t.enabled })));
-    }).catch((e) => toast(e.message, true));
+    }).catch(notifyError);
   }, [id]);
 
   const be = useMemo(() => backends.find((b) => b.id === f.backend), [backends, f.backend]);
   const selectedModel = be?.models.find((m: any) => m.id === (f.model || be.default_model));
   const mode = be?.agent_modes.find((m: any) => m.id === (f.agent_mode || be.default_agent_mode));
+  const isClaude = f.backend === "claude";
 
   const checkCron = async (i: number, cron: string, tz: string) => {
-    if (!cron) return setCronInfo((s) => ({ ...s, [i]: { ok: false, error: "required" } }));
+    if (!cron) return setCronInfo((s) => ({ ...s, [i]: { ok: false, error: "A cron expression is required." } }));
     const r = await post("/api/validate/cron", { cron, tz }).catch((e) => ({ ok: false, error: e.message }));
     setCronInfo((s) => ({ ...s, [i]: r }));
   };
@@ -56,87 +94,269 @@ export function AutomationForm({ id }: { id?: string }) {
     try {
       const b = body();
       const a = id ? await put(`/api/automations/${id}`, b) : await post("/api/automations", b);
-      toast(id ? "Saved" : "Created"); nav(id ? "/" : `/automations/${a.id}`);
-    } catch (e: any) { toast(e.message, true); } finally { setSaving(false); }
+      notify(id ? "Saved" : "Created"); nav(id ? "/automations" : `/automations/${a.id}`);
+    } catch (e) { notifyError(e); } finally { setSaving(false); }
   };
-  const doPreview = async () => { if (!id) return toast("Save first to preview the rendered prompt"); const r = await post(`/api/automations/${id}/preview`); setPreview(r.prompt); };
-  const runNow = async () => { if (!id) return; const r = await post(`/api/automations/${id}/run`); nav(`/runs/${r.id}`); };
+  const doPreview = async () => { try { const r = await post(`/api/automations/${id}/preview`); setPreview(r.prompt); } catch (e) { notifyError(e); } };
+  const runNow = async () => { try { const r = await post(`/api/automations/${id}/run`); nav(`/runs/${r.id}`); } catch (e) { notifyError(e); } };
 
-  return <>
-    <div className="page-head"><div><h1>{id ? "Edit automation" : "New automation"}</h1><div className="sub">Same shape as Devin's automation form: name, triggers, agent definition, limits.</div></div>
-      <div className="actions">{id && <button className="btn" onClick={runNow}>▶ Run now</button>}<button className="btn" onClick={() => nav("/")}>Cancel</button><button className="btn primary" disabled={saving} onClick={save}>{saving ? "Saving…" : "Save"}</button></div></div>
+  const modelOptions = [{ label: `Default (${be?.default_model ?? "…"})`, value: DEFAULT }, ...(be?.models ?? []).map((m: any) => ({ label: `${m.label}${m.free ? " · free" : m.note ? ` · ${m.note}` : ""}`, value: m.id }))];
+  // A Claude model typed by hand is not in the list; keep it selectable so the field still shows it.
+  if (f.model && !modelOptions.some((o) => o.value === f.model)) modelOptions.push({ label: f.model, value: f.model });
 
-    <div className="card"><h2>Name</h2>
-      <div className="row"><label className="f"><span><b>Name</b></span><input type="text" value={f.name} onChange={(e) => set("name", e.target.value)} placeholder="Nightly dependency check" /></label>
-        <label className="check" style={{ alignSelf: "end", paddingBottom: 8 }}><input type="checkbox" checked={f.enabled} onChange={(e) => set("enabled", e.target.checked)} /> Enabled</label></div>
-    </div>
+  const actions = (
+    <>
+      <Button type="button" shape="rounded" size="sm" variant="ghost" onClick={() => nav("/automations")}>Cancel</Button>
+      {id && <Button type="button" shape="rounded" size="sm" variant="secondary" onClick={runNow}><IconPlayerPlay data-icon="inline-start" />Run now</Button>}
+      <Button type="submit" form="automation" shape="rounded" size="sm" disabled={saving}>{saving ? "Saving…" : id ? "Save changes" : "Create automation"}</Button>
+    </>
+  );
 
-    <div className="card"><h2>Triggers <small>manual "Run now" is always available</small></h2>
-      {triggers.map((t, i) => <div className="trigger" key={i}>
-        <div className="head"><span>{{ schedule: "⏱ Schedule", webhook: "⚡ Webhook", github: "GitHub (polled)", manual: "Manual" }[t.kind]}</span>
-          <div className="actions"><label className="check"><input type="checkbox" checked={t.enabled !== false} onChange={(e) => updTrigger(i, { enabled: e.target.checked })} /> enabled</label><button className="btn sm danger" onClick={() => setTriggers((ts) => ts.filter((_, j) => j !== i))}>Remove</button></div></div>
-        {t.kind === "schedule" && <>
-          <div className="row"><label className="f"><span><b>Cron</b> (5 fields, or @hourly @daily @weekdays @weekly @every15m)</span><input type="text" value={t.config.cron ?? ""} onChange={(e) => { updTrigger(i, { config: { cron: e.target.value } }); checkCron(i, e.target.value, t.config.tz); }} onBlur={() => checkCron(i, t.config.cron, t.config.tz)} /></label>
-            <label className="f"><span><b>Timezone</b></span><input type="text" value={t.config.tz ?? ""} onChange={(e) => updTrigger(i, { config: { tz: e.target.value } })} placeholder="Australia/Sydney" /></label></div>
-          {cronInfo[i] && (cronInfo[i]!.ok ? <div className="hint">Next: {cronInfo[i]!.next?.slice(0, 3).map((d) => new Date(d).toLocaleString()).join(" · ")}</div> : <div className="err">{cronInfo[i]!.error}</div>)}
-        </>}
-        {t.kind === "webhook" && <>
-          {t.id ? <div className="kv"><dt>URL</dt><dd className="mono">POST {location.origin}/hooks/{t.id}</dd><dt>Secret</dt><dd className="mono">{t.config.secret}</dd><dt>Auth</dt><dd className="hint">Header <code>X-Autoed-Secret: &lt;secret&gt;</code>, or HMAC-SHA256 of the body in <code>X-Autoed-Signature: sha256=…</code> (GitHub's <code>X-Hub-Signature-256</code> also works). Body ≤ 1 MB, available as <code>{"{{event.payload}}"}</code>.</dd></div>
-            : <div className="hint">A secret and URL are generated when you save.</div>}
-        </>}
-        {t.kind === "github" && <>
-          <div className="row-3"><label className="f"><span><b>Repository</b> owner/name</span><input type="text" value={t.config.repo ?? ""} onChange={(e) => updTrigger(i, { config: { repo: e.target.value } })} placeholder="acme/widgets" /></label>
-            <label className="f"><span><b>Events</b></span><select multiple value={t.config.events ?? []} onChange={(e) => updTrigger(i, { config: { events: [...e.target.selectedOptions].map((o) => o.value) } })} style={{ height: 110 }}>{["issue", "issue_comment", "pull_request", "pr_review", "push", "check_run"].map((ev) => <option key={ev} value={ev}>{ev}</option>)}</select></label>
-            <div><label className="f"><span><b>Poll every (seconds)</b></span><input type="number" value={t.config.intervalSec ?? 300} onChange={(e) => updTrigger(i, { config: { intervalSec: Number(e.target.value) } })} /></label>
-              <label className="f" style={{ marginTop: 10 }}><span><b>Filter</b> (regex over the event JSON, optional)</span><input type="text" value={t.config.filter ?? ""} onChange={(e) => updTrigger(i, { config: { filter: e.target.value } })} placeholder="label.*needs-triage" /></label></div></div>
-          <div className="hint">Polled with <code>gh api</code> using a cursor. Requires <code>gh auth login</code> on this Mac. No inbound port needed.</div>
-        </>}
-      </div>)}
-      <div className="actions"><button className="btn sm" onClick={() => addTrigger("schedule")}>+ Schedule</button><button className="btn sm" onClick={() => addTrigger("webhook")}>+ Webhook</button><button className="btn sm" onClick={() => addTrigger("github")}>+ GitHub</button></div>
-    </div>
+  return (
+    <Page>
+      <PageHeader title={id ? f.name || "Automation" : "New automation"} actions={actions} />
 
-    <div className="card"><h2>Agent definition</h2>
-      <div className="form">
-        <div className="row-3">
-          <label className="f"><span><b>Backend</b></span><select value={f.backend} onChange={(e) => { set("backend", e.target.value); set("model", ""); set("agent_mode", ""); }}>{backends.map((b) => <option key={b.id} value={b.id} disabled={!b.detection.ok}>{b.label}{b.detection.ok ? "" : " (not available)"}</option>)}</select>
-            {be && <span className="hint">{be.detection.binary} · {be.detection.version}{be.detection.loggedIn === false && <span className="err"> · not logged in</span>}</span>}</label>
-          <label className="f"><span><b>Model</b></span><select value={f.model} onChange={(e) => set("model", e.target.value)}><option value="">Default ({be?.default_model})</option>{be?.models.map((m: any) => <option key={m.id} value={m.id}>{m.label}{m.free ? " · free" : m.note ? ` · ${m.note}` : ""}</option>)}</select>
-            {selectedModel && <span className={"chip " + (selectedModel.free ? "free" : "paid")}>{selectedModel.free ? "Free tier / subscription" : `Paid: ${selectedModel.note}`}</span>}
-            {f.backend === "claude" && <input type="text" value={f.model} onChange={(e) => set("model", e.target.value)} placeholder="or type a model id" style={{ marginTop: 6 }} />}</label>
-          <label className="f"><span><b>Agent mode</b> (permissions)</span><select value={f.agent_mode} onChange={(e) => set("agent_mode", e.target.value)}><option value="">Default ({be?.default_agent_mode})</option>{be?.agent_modes.map((m: any) => <option key={m.id} value={m.id}>{m.label}</option>)}</select>
-            {mode?.dangerous && <span className="warn">⚠ This mode skips all permission prompts. The agent can run any command in the working directory and beyond.</span>}</label>
-        </div>
-        <label className="f"><span><b>Instructions</b> · variables: <code>{"{{trigger.kind}} {{event.payload}} {{event.occurred_at}} {{catchup.missed_count}} {{run.id}} {{automation.name}}"}</code></span>
-          <textarea value={f.instructions} onChange={(e) => set("instructions", e.target.value)} placeholder={"Check open dependabot PRs. For each one that passes CI, review the diff and merge it if safe.\n\nTrigger: {{trigger.kind}}\nEvent: {{event.payload}}"} style={{ minHeight: 180 }} /></label>
-        <div className="row"><label className="f"><span><b>Working directory</b></span><input type="text" value={f.working_dir} onChange={(e) => set("working_dir", e.target.value)} placeholder="~/Projects/widgets" /></label>
-          {f.backend === "claude" ? <label className="f"><span><b>Agent profile</b> (<code>claude --agent</code>, optional)</span><input type="text" value={f.agent_profile} onChange={(e) => set("agent_profile", e.target.value)} /></label> : <label className="check" style={{ alignSelf: "end", paddingBottom: 8 }}><input type="checkbox" checked={f.sandbox} onChange={(e) => set("sandbox", e.target.checked)} /> Sandbox exec (Devin <code>--sandbox</code>)</label>}</div>
-        {f.backend === "claude" && <label className="f"><span><b>MCP servers</b> (JSON passed to <code>--mcp-config</code>, optional)</span><textarea value={f.mcp_config} onChange={(e) => set("mcp_config", e.target.value)} placeholder='{ "mcpServers": { } }' style={{ minHeight: 70 }} /></label>}
-      </div>
-    </div>
+      <form id="automation" onSubmit={(e) => { e.preventDefault(); save(); }} className="flex max-w-3xl flex-col gap-10">
+        <Section title="General">
+          <FieldGroup className="gap-6">
+            <Field>
+              <FieldLabel htmlFor="name">Name</FieldLabel>
+              <Input id="name" value={f.name} onChange={(e) => set("name", e.target.value)} placeholder="Nightly dependency check" />
+            </Field>
+            <SwitchField id="enabled" checked={f.enabled} onChange={(v) => set("enabled", v)} label="Enabled" />
+          </FieldGroup>
+        </Section>
 
-    <div className="card"><details><summary>Advanced: isolation, limits, catch-up, notifications, metadata</summary>
-      <div className="form">
-        <div className="row">
-          <label className="check"><input type="checkbox" checked={f.isolate_worktree} onChange={(e) => set("isolate_worktree", e.target.checked)} /> Isolated git worktree per run <small>(~/.autoed/worktrees/&lt;run&gt;, removed after the run)</small></label>
-          <label className="check"><input type="checkbox" checked={f.continue_session} onChange={(e) => set("continue_session", e.target.checked)} /> Continue previous session <small>(<code>--resume</code> last successful run)</small></label>
-        </div>
-        <div className="row-3">
-          <label className="f"><span><b>Timeout</b> seconds</span><input type="number" value={f.timeout_sec} onChange={(e) => set("timeout_sec", e.target.value)} /></label>
-          <label className="f"><span><b>Max concurrent</b> runs of this automation</span><input type="number" value={f.max_concurrent} onChange={(e) => set("max_concurrent", e.target.value)} /></label>
-          <label className="f"><span><b>Catch-up policy</b> after sleep / power-off</span><select value={f.catchup_policy} onChange={(e) => set("catchup_policy", e.target.value)}><option value="coalesce">Coalesce missed fires into one run</option><option value="replay">Replay every missed fire</option><option value="skip">Skip missed fires</option></select></label>
-        </div>
-        <div className="row"><label className="f"><span><b>Rate limit</b> max runs</span><input type="number" value={f.rate_limit_count} onChange={(e) => set("rate_limit_count", e.target.value)} placeholder="e.g. 50" /></label>
-          <label className="f"><span><b>per window</b> seconds</span><input type="number" value={f.rate_limit_window_sec} onChange={(e) => set("rate_limit_window_sec", e.target.value)} placeholder="e.g. 3600" /></label></div>
-        <div className="row-3">
-          <label className="check"><input type="checkbox" checked={f.notify_macos} onChange={(e) => set("notify_macos", e.target.checked)} /> macOS notification</label>
-          <label className="f"><span><b>Webhook notification URL</b></span><input type="url" value={f.notify_webhook_url} onChange={(e) => set("notify_webhook_url", e.target.value)} placeholder="https://hooks.slack.com/…" /></label>
-          <label className="f"><span><b>Template</b></span><select value={f.notify_webhook_template} onChange={(e) => set("notify_webhook_template", e.target.value)}><option value="generic">Generic JSON</option><option value="slack">Slack</option><option value="telegram">Telegram</option><option value="ntfy">ntfy</option></select></label>
-        </div>
-        {f.backend === "claude" && <><label className="f"><span><b>Structured output JSON schema</b> (<code>--json-schema</code>, optional)</span><textarea value={f.json_schema} onChange={(e) => set("json_schema", e.target.value)} style={{ minHeight: 60 }} /></label>
-          <label className="f"><span><b>Additional directories</b> (<code>--add-dir</code>, one per line)</span><textarea value={f.add_dirs} onChange={(e) => set("add_dirs", e.target.value)} style={{ minHeight: 50 }} /></label></>}
-        <label className="f"><span><b>Metadata</b> JSON key/values, available as <code>{"{{automation.metadata}}"}</code></span><textarea value={f.metadata} onChange={(e) => set("metadata", e.target.value)} placeholder='{ "team": "platform" }' style={{ minHeight: 60 }} /></label>
-      </div></details></div>
+        <Section title="Triggers">
+          <div className="flex flex-col gap-4">
+            {triggers.map((t, i) => {
+              const { label, Icon } = TRIGGER_META[t.kind];
+              const bad = cronInfo[i] && !cronInfo[i]!.ok;
+              return (
+                <Panel key={i} className="flex flex-col gap-5">
+                  <div className="flex items-center gap-2">
+                    <Icon className="size-4 text-gray-900" />
+                    <span className="text-label-14 text-gray-1000">{label}</span>
+                    <div className="ms-auto flex items-center gap-2">
+                      <Switch size="sm" checked={t.enabled !== false} onCheckedChange={(v) => updTrigger(i, { enabled: v })} aria-label={`${label} trigger enabled`} />
+                      <Button type="button" shape="rounded" variant="ghost" size="icon-sm" aria-label={`Remove ${label} trigger`} onClick={() => setTriggers((ts) => ts.filter((_, j) => j !== i))}><IconTrash /></Button>
+                    </div>
+                  </div>
 
-    {id && <div className="card"><h2>Rendered prompt preview <small>with manual-trigger placeholders</small></h2><div className="actions"><button className="btn sm" onClick={doPreview}>Render</button></div>{preview && <pre className="log" style={{ marginTop: 10 }}>{preview}</pre>}</div>}
-  </>;
+                  {t.kind === "schedule" && (
+                    <Grid>
+                      <Field data-invalid={bad || undefined}>
+                        <FieldLabel htmlFor={`cron-${i}`}>Cron</FieldLabel>
+                        <Input id={`cron-${i}`} className="text-label-14-mono" value={t.config.cron ?? ""} aria-invalid={bad || undefined}
+                          onChange={(e) => { updTrigger(i, { config: { cron: e.target.value } }); checkCron(i, e.target.value, t.config.tz); }} onBlur={() => checkCron(i, t.config.cron, t.config.tz)} />
+                        {bad
+                          ? <FieldError className="text-copy-13">{cronInfo[i]!.error}</FieldError>
+                          : <Hint>{cronInfo[i]?.next ? <>Next: {cronInfo[i]!.next!.slice(0, 3).map((d) => new Date(d).toLocaleString()).join(" · ")}</> : <>Five fields, or <Code>@hourly</Code> <Code>@daily</Code> <Code>@weekdays</Code> <Code>@weekly</Code> <Code>@every15m</Code></>}</Hint>}
+                      </Field>
+                      <Field>
+                        <FieldLabel htmlFor={`tz-${i}`}>Timezone</FieldLabel>
+                        <Input id={`tz-${i}`} value={t.config.tz ?? ""} onChange={(e) => updTrigger(i, { config: { tz: e.target.value } })} placeholder="Australia/Sydney" />
+                      </Field>
+                    </Grid>
+                  )}
+
+                  {t.kind === "webhook" && (t.id ? (
+                    <Ledger items={[
+                      ["URL", <Mono>POST {location.origin}/hooks/{t.id}</Mono>],
+                      ["Secret", <Mono>{t.config.secret}</Mono>],
+                      ["Auth", <span className="text-copy-13 text-gray-900"><Code>X-Autoed-Secret: &lt;secret&gt;</Code>, or <Code>X-Autoed-Signature: sha256=&lt;hmac&gt;</Code> (<Code>X-Hub-Signature-256</Code> accepted).</span>],
+                      ["Body", <span className="text-copy-13 text-gray-900">Up to 1 MB, available as <Code>{"{{event.payload}}"}</Code>.</span>],
+                    ]} />
+                  ) : <p className="text-copy-13 text-gray-900">URL and secret are generated on save.</p>)}
+
+                  {t.kind === "github" && (
+                    <FieldGroup className="gap-6">
+                      <Grid>
+                        <Field>
+                          <FieldLabel htmlFor={`repo-${i}`}>Repository</FieldLabel>
+                          <Input id={`repo-${i}`} value={t.config.repo ?? ""} onChange={(e) => updTrigger(i, { config: { repo: e.target.value } })} placeholder="acme/widgets" />
+                        </Field>
+                        <Field>
+                          <FieldLabel htmlFor={`interval-${i}`}>Poll every, in seconds</FieldLabel>
+                          <Input id={`interval-${i}`} type="number" value={t.config.intervalSec ?? 300} onChange={(e) => updTrigger(i, { config: { intervalSec: Number(e.target.value) } })} />
+                        </Field>
+                      </Grid>
+                      <FieldSet>
+                        <FieldLegend variant="label">Events</FieldLegend>
+                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                          {GITHUB_EVENTS.map((ev) => {
+                            const events: string[] = t.config.events ?? [];
+                            return (
+                              <Field key={ev} orientation="horizontal">
+                                <Checkbox id={`ev-${i}-${ev}`} checked={events.includes(ev)} onCheckedChange={(c) => updTrigger(i, { config: { events: c ? [...events, ev] : events.filter((x) => x !== ev) } })} />
+                                <FieldLabel htmlFor={`ev-${i}-${ev}`} className="text-label-13-mono">{ev}</FieldLabel>
+                              </Field>
+                            );
+                          })}
+                        </div>
+                      </FieldSet>
+                      <Field>
+                        <FieldLabel htmlFor={`filter-${i}`}>Filter</FieldLabel>
+                        <Input id={`filter-${i}`} className="text-label-14-mono" value={t.config.filter ?? ""} onChange={(e) => updTrigger(i, { config: { filter: e.target.value } })} placeholder="label.*needs-triage" />
+                        <Hint>Optional regex over the event JSON. Needs <Code>gh auth login</Code>.</Hint>
+                      </Field>
+                    </FieldGroup>
+                  )}
+                </Panel>
+              );
+            })}
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" shape="rounded" variant="secondary" size="sm" onClick={() => addTrigger("schedule")}><IconPlus data-icon="inline-start" />Schedule</Button>
+              <Button type="button" shape="rounded" variant="secondary" size="sm" onClick={() => addTrigger("webhook")}><IconPlus data-icon="inline-start" />Webhook</Button>
+              <Button type="button" shape="rounded" variant="secondary" size="sm" onClick={() => addTrigger("github")}><IconPlus data-icon="inline-start" />GitHub</Button>
+            </div>
+          </div>
+        </Section>
+
+        <Section title="Agent">
+          <FieldGroup className="gap-6">
+            <Grid>
+              <Field>
+                <FieldLabel htmlFor="backend">Backend</FieldLabel>
+                <Picker id="backend" value={f.backend} onChange={(v) => setF((s: any) => ({ ...s, backend: v, model: "", agent_mode: "" }))}
+                  options={backends.map((b) => ({ label: `${b.label}${b.detection.ok ? "" : " (not available)"}`, value: b.id, disabled: !b.detection.ok }))} />
+                {be && <Hint>{be.detection.version}{be.detection.loggedIn === false && <span className="text-red-900"> · not logged in</span>}</Hint>}
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="agent-mode">Permissions</FieldLabel>
+                <Picker id="agent-mode" value={f.agent_mode || DEFAULT} onChange={(v) => set("agent_mode", v === DEFAULT ? "" : v)}
+                  options={[{ label: `Default (${be?.default_agent_mode ?? "…"})`, value: DEFAULT }, ...(be?.agent_modes ?? []).map((m: any) => ({ label: m.label, value: m.id }))]} />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="model">Model</FieldLabel>
+                <Picker id="model" value={f.model || DEFAULT} onChange={(v) => set("model", v === DEFAULT ? "" : v)} options={modelOptions} />
+                {selectedModel && <div><Badge variant={selectedModel.free ? "secondary" : "outline"}>{selectedModel.free ? "Free tier or subscription" : `Paid: ${selectedModel.note}`}</Badge></div>}
+              </Field>
+              {isClaude && (
+                <Field>
+                  <FieldLabel htmlFor="model-id">Model id</FieldLabel>
+                  <Input id="model-id" className="text-label-14-mono" value={f.model} onChange={(e) => set("model", e.target.value)} placeholder="Or type any Claude model id" />
+                </Field>
+              )}
+            </Grid>
+            {mode?.dangerous && (
+              <Notice tone="danger" icon={IconAlertTriangle} title="Skips every permission prompt." />
+            )}
+            <Field>
+              <FieldLabel htmlFor="instructions">Instructions</FieldLabel>
+              <Textarea id="instructions" className="min-h-48 text-copy-13-mono" value={f.instructions} onChange={(e) => set("instructions", e.target.value)}
+                placeholder="What should the agent do?" />
+              <Hint>Variables: <Code>{"{{trigger.kind}}"}</Code> <Code>{"{{event.payload}}"}</Code> <Code>{"{{event.occurred_at}}"}</Code> <Code>{"{{catchup.missed_count}}"}</Code> <Code>{"{{run.id}}"}</Code> <Code>{"{{automation.name}}"}</Code></Hint>
+            </Field>
+            <Grid>
+              <Field>
+                <FieldLabel htmlFor="working-dir">Working directory</FieldLabel>
+                <Input id="working-dir" className="text-label-14-mono" value={f.working_dir} onChange={(e) => set("working_dir", e.target.value)} placeholder="~/Projects/widgets" />
+              </Field>
+              {isClaude ? (
+                <Field>
+                  <FieldLabel htmlFor="agent-profile">Agent profile</FieldLabel>
+                  <Input id="agent-profile" value={f.agent_profile} onChange={(e) => set("agent_profile", e.target.value)} />
+                  <Hint><Code>claude --agent</Code></Hint>
+                </Field>
+              ) : (
+                <SwitchField id="sandbox" checked={f.sandbox} onChange={(v) => set("sandbox", v)} label="Sandbox exec" description={<>Devin's <Code>--sandbox</Code>.</>} />
+              )}
+            </Grid>
+            {isClaude && (
+              <Field>
+                <FieldLabel htmlFor="mcp">MCP servers</FieldLabel>
+                <Textarea id="mcp" className="min-h-20 text-copy-13-mono" value={f.mcp_config} onChange={(e) => set("mcp_config", e.target.value)} placeholder='{ "mcpServers": { } }' />
+                <Hint><Code>--mcp-config</Code> JSON</Hint>
+              </Field>
+            )}
+          </FieldGroup>
+        </Section>
+
+        <Section title="Limits">
+          <FieldGroup className="gap-6">
+            <Grid>
+              <Field>
+                <FieldLabel htmlFor="timeout">Timeout, in seconds</FieldLabel>
+                <Input id="timeout" type="number" value={f.timeout_sec} onChange={(e) => set("timeout_sec", e.target.value)} />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="max-concurrent">Max concurrent runs</FieldLabel>
+                <Input id="max-concurrent" type="number" value={f.max_concurrent} onChange={(e) => set("max_concurrent", e.target.value)} />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="rate-count">Rate limit, max runs</FieldLabel>
+                <Input id="rate-count" type="number" value={f.rate_limit_count} onChange={(e) => set("rate_limit_count", e.target.value)} placeholder="50" />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="rate-window">Per window, in seconds</FieldLabel>
+                <Input id="rate-window" type="number" value={f.rate_limit_window_sec} onChange={(e) => set("rate_limit_window_sec", e.target.value)} placeholder="3600" />
+              </Field>
+              <Field className="sm:col-span-2">
+                <FieldLabel htmlFor="catchup">After sleep or power-off</FieldLabel>
+                <Picker id="catchup" value={f.catchup_policy} onChange={(v) => set("catchup_policy", v)} options={[
+                  { label: "Coalesce missed fires into one run", value: "coalesce" },
+                  { label: "Replay every missed fire", value: "replay" },
+                  { label: "Skip missed fires", value: "skip" },
+                ]} />
+              </Field>
+            </Grid>
+            <SwitchField id="worktree" checked={f.isolate_worktree} onChange={(v) => set("isolate_worktree", v)} label="Isolated git worktree per run" description={<><Code>~/.autoed/worktrees/&lt;run&gt;</Code>, removed after the run.</>} />
+            <SwitchField id="continue" checked={f.continue_session} onChange={(v) => set("continue_session", v)} label="Continue previous session" description={<><Code>--resume</Code> the last successful run.</>} />
+          </FieldGroup>
+        </Section>
+
+        <Section title="Notifications">
+          <FieldGroup className="gap-6">
+            <SwitchField id="notify-macos" checked={f.notify_macos} onChange={(v) => set("notify_macos", v)} label="macOS notification" />
+            <div className="grid gap-x-3 gap-y-6 sm:grid-cols-[2fr_1fr]">
+              <Field>
+                <FieldLabel htmlFor="webhook-url">Webhook URL</FieldLabel>
+                <Input id="webhook-url" type="url" value={f.notify_webhook_url} onChange={(e) => set("notify_webhook_url", e.target.value)} placeholder="https://hooks.slack.com/…" />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="webhook-template">Template</FieldLabel>
+                <Picker id="webhook-template" value={f.notify_webhook_template} onChange={(v) => set("notify_webhook_template", v)} options={[
+                  { label: "Generic JSON", value: "generic" },
+                  { label: "Slack", value: "slack" },
+                  { label: "Telegram", value: "telegram" },
+                  { label: "ntfy", value: "ntfy" },
+                ]} />
+              </Field>
+            </div>
+          </FieldGroup>
+        </Section>
+
+        <Section title="Advanced">
+          <FieldGroup className="gap-6">
+            {isClaude && <>
+              <Field>
+                <FieldLabel htmlFor="json-schema">Structured output JSON schema</FieldLabel>
+                <Textarea id="json-schema" className="min-h-16 text-copy-13-mono" value={f.json_schema} onChange={(e) => set("json_schema", e.target.value)} />
+                <Hint><Code>--json-schema</Code></Hint>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="add-dirs">Additional directories</FieldLabel>
+                <Textarea id="add-dirs" className="min-h-16 text-copy-13-mono" value={f.add_dirs} onChange={(e) => set("add_dirs", e.target.value)} />
+                <Hint>One per line. <Code>--add-dir</Code></Hint>
+              </Field>
+            </>}
+            <Field>
+              <FieldLabel htmlFor="metadata">Metadata</FieldLabel>
+              <Textarea id="metadata" className="min-h-16 text-copy-13-mono" value={f.metadata} onChange={(e) => set("metadata", e.target.value)} placeholder='{ "team": "platform" }' />
+              <Hint>Available as <Code>{"{{automation.metadata}}"}</Code>.</Hint>
+            </Field>
+          </FieldGroup>
+        </Section>
+
+        {id && (
+          <Section title="Rendered prompt" actions={<Button type="button" shape="rounded" variant="secondary" size="xs" onClick={doPreview}>Render</Button>}>
+            {preview && <CodeView>{preview}</CodeView>}
+          </Section>
+        )}
+
+        <div className="flex items-center justify-end gap-2 border-t border-gray-alpha-400 pt-6">{actions}</div>
+      </form>
+    </Page>
+  );
 }

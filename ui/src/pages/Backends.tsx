@@ -1,25 +1,58 @@
 import { useEffect, useState } from "react";
-import { get, post } from "../api";
-import { useToast } from "../App";
+import { IconAlertTriangle, IconRefresh } from "@tabler/icons-react";
+import { get, post } from "@/lib/api";
+import { notify, notifyError } from "@/lib/notify";
+import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
+import { Loading } from "@/components/loading";
+import { Ledger, Mono, Notice, Page, PageHeader, Section } from "@/components/page";
+
+/** A yes/no/unknown answer with a square dot. */
+function Check({ ok, children }: { ok: boolean | null; children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center gap-2">
+      <span aria-hidden className={cn("size-1.5 shrink-0", ok === true ? "bg-green-700" : ok === false ? "bg-red-700" : "bg-gray-600")} />
+      {children}
+    </span>
+  );
+}
 
 export function Backends() {
-  const toast = useToast();
   const [data, setData] = useState<any>(null);
   const [busy, setBusy] = useState(false);
-  const load = () => get("/api/backends").then(setData).catch((e) => toast(e.message, true));
+  const load = () => get("/api/backends").then(setData).catch(notifyError);
   useEffect(() => { load(); }, []);
-  const refresh = async () => { setBusy(true); try { await post("/api/backends/refresh"); await load(); toast("Re-detected binaries and refreshed models"); } finally { setBusy(false); } };
-  if (!data) return <div className="empty">Detecting backends…</div>;
-  const ok = (v: boolean | null) => v === true ? <span className="ok">✓</span> : v === false ? <span className="err">✗</span> : <span className="hint">?</span>;
-  return <>
-    <div className="page-head"><div><h1>Backends</h1><div className="sub">Agent CLIs on this Mac. Runs use the CLI's own login; autoed never handles keys.</div></div><button className="btn" disabled={busy} onClick={refresh}>{busy ? "Refreshing…" : "Re-detect & refresh models"}</button></div>
-    {data.environment.api_key_vars_present.length > 0 && <div className="card warn">⚠ {data.environment.api_key_vars_present.join(", ")} is set in the engine's environment. Runs are launched with a scrubbed environment, but remove it from your login environment so Claude Code never bills API credits.</div>}
-    {data.backends.map((b: any) => <div className="card" key={b.id}>
-      <h2>{b.label} {ok(b.detection.ok)}</h2>
-      <dl className="kv"><dt>Binary</dt><dd className="mono">{b.detection.binary ?? <span className="err">{b.detection.note}</span>}</dd><dt>Version</dt><dd>{b.detection.version ?? "–"}</dd><dt>Logged in</dt><dd>{ok(b.detection.loggedIn)} {b.detection.loggedIn === false && <span className="hint">{b.detection.note}</span>}</dd>
-        <dt>Default</dt><dd><span className="chip">{b.default_model}</span> <span className="chip">{b.default_agent_mode}</span></dd>
-        <dt>Models</dt><dd>{b.models.map((m: any) => <span key={m.id} className={"chip " + (m.free ? "free" : "paid")} style={{ margin: "0 4px 4px 0" }} title={m.note}>{m.label}{m.free ? " · free" : ""}</span>)}</dd>
-        <dt>Agent modes</dt><dd>{b.agent_modes.map((m: any) => <span key={m.id} className={"chip" + (m.dangerous ? " paid" : "")} style={{ margin: "0 4px 4px 0" }}>{m.id}{m.dangerous ? " ⚠" : ""}</span>)}</dd></dl>
-    </div>)}
-  </>;
+  const refresh = async () => { setBusy(true); try { await post("/api/backends/refresh"); await load(); notify("Backends refreshed"); } catch (e) { notifyError(e); } finally { setBusy(false); } };
+
+  return (
+    <Page>
+      <PageHeader
+        title="Backends"
+        actions={<Button shape="rounded" size="sm" variant="secondary" disabled={busy} onClick={refresh}>{busy ? <Spinner data-icon="inline-start" /> : <IconRefresh data-icon="inline-start" />}Re-detect</Button>}
+      />
+      {!data ? <Loading label="Detecting backends" /> : <>
+        {data.environment.api_key_vars_present.length > 0 && (
+          <Notice icon={IconAlertTriangle} title={`${data.environment.api_key_vars_present.join(", ")} is set in the engine's environment`}>
+            Runs don't get it, but remove it from your login environment so Claude Code can't bill API credits.
+          </Notice>
+        )}
+        <div className="grid gap-10 xl:grid-cols-2">
+          {data.backends.map((b: any) => (
+            <Section key={b.id} title={b.label} actions={<Check ok={b.detection.ok}><span className="text-label-13">{b.detection.ok ? "Available" : "Not available"}</span></Check>}>
+              <Ledger items={[
+                ["Binary", b.detection.binary ? <Mono>{b.detection.binary}</Mono> : <span className="text-red-900">{b.detection.note}</span>],
+                ["Version", b.detection.version ?? "–"],
+                ["Logged in", <Check ok={b.detection.loggedIn}>{b.detection.loggedIn === true ? "Yes" : b.detection.loggedIn === false ? b.detection.note ?? "No" : "Unknown"}</Check>],
+                ["Defaults", <span className="inline-flex flex-wrap gap-1"><Badge variant="secondary">{b.default_model}</Badge><Badge variant="outline">{b.default_agent_mode}</Badge></span>],
+                ["Agent modes", <span className="inline-flex flex-wrap gap-1">{b.agent_modes.map((m: any) => <Badge key={m.id} variant={m.dangerous ? "destructive" : "outline"}>{m.id}</Badge>)}</span>],
+                [`Models (${b.models.length})`, <span className="inline-flex flex-wrap gap-1">{b.models.map((m: any) => <Badge key={m.id} variant="outline" className="max-w-full" title={m.note ? `${m.label} · ${m.note}` : m.label}><span className="truncate">{m.label}</span>{m.free && <span className="text-green-900">Free</span>}</Badge>)}</span>],
+              ]} />
+            </Section>
+          ))}
+        </div>
+      </>}
+    </Page>
+  );
 }

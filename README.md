@@ -156,3 +156,5 @@ bun run build        # compiled binaries in dist/
 ```
 
 Layout: `src/engine.ts` (dispatch and run lifecycle), `src/scheduler.ts` (cron and catch-up), `src/runner.ts` (process groups, logs, timeouts), `src/backends/` (Claude and Devin adapters), `src/server/` (Hono API and embedded UI), `src/github.ts` (poller), `ui/` (React, built to one HTML file that is embedded in the binary).
+
+The UI uses the [ziiz](https://ziiz.vercel.app) design system: Tailwind v4 with the `@nafisazizir/ziiz` theme, and components from the `@ziiz` shadcn registry in `ui/src/components/ui/` (add more with `bunx shadcn@latest add @ziiz/<name>`). Stick to ziiz vocabulary: ramp colors (`bg-gray-100`, `border-gray-alpha-400`), type roles (`text-label-14`, `text-heading-32`), and materials only on floating surfaces. Press D in the UI to toggle dark mode.
