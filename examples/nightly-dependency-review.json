@@ -1,0 +1,14 @@
+{
+  "name": "Nightly dependency review",
+  "backend": "devin",
+  "model": "swe-2-high",
+  "agent_mode": "accept-edits",
+  "working_dir": "~/Projects/my-app",
+  "instructions": "You are running unattended as automation \"{{automation.name}}\" (trigger: {{trigger.kind}}, catch-up missed fires: {{catchup.missed_count}}).\n\nList open dependabot / renovate pull requests with `gh pr list`. For each one whose checks pass, read the diff. If the bump is a patch or minor version with no breaking-change notes, approve and merge it with `gh pr merge --squash`. Otherwise leave a short comment explaining what needs a human.\n\nFinish with a summary of what you merged and what you skipped.",
+  "timeout_sec": 3600,
+  "catchup_policy": "coalesce",
+  "notify": { "macos": true },
+  "triggers": [
+    { "kind": "schedule", "config": { "cron": "0 3 * * 1-5", "tz": "Australia/Sydney" } }
+  ]
+}

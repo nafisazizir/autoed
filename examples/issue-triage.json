@@ -1,0 +1,16 @@
+{
+  "name": "Issue triage",
+  "backend": "claude",
+  "model": "sonnet",
+  "agent_mode": "acceptEdits",
+  "working_dir": "~/Projects/my-app",
+  "instructions": "A GitHub event arrived:\n\n{{event.payload}}\n\nIf it is a newly opened issue, reproduce it if possible, add the most fitting labels with `gh issue edit`, and post one comment with your findings and a proposed fix. Do not open pull requests.",
+  "timeout_sec": 1800,
+  "max_concurrent": 1,
+  "rate_limit_count": 20,
+  "rate_limit_window_sec": 3600,
+  "triggers": [
+    { "kind": "github", "config": { "repo": "acme/my-app", "events": ["issue"], "intervalSec": 300 } },
+    { "kind": "webhook" }
+  ]
+}

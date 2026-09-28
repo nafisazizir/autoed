@@ -1,0 +1,11 @@
+{
+  "name": "Post-deploy smoke check",
+  "backend": "claude",
+  "model": "haiku",
+  "agent_mode": "plan",
+  "working_dir": "~/Projects/my-app",
+  "instructions": "A deploy webhook fired at {{event.occurred_at}} with payload:\n\n{{event.payload}}\n\nCurl the health endpoints listed in docs/healthchecks.md and report any that do not return 200. Do not modify files.",
+  "timeout_sec": 600,
+  "notify": { "macos": true, "webhook": { "url": "https://ntfy.sh/my-topic", "template": "ntfy" } },
+  "triggers": [ { "kind": "webhook" } ]
+}
