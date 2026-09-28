@@ -1,5 +1,6 @@
 import { chmodSync, copyFileSync, existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
+import { loginUser } from "./backends/discover.ts";
 import { join, resolve } from "node:path";
 import { APP_ID, type Paths } from "./config.ts";
 import { runCapture } from "./backends/discover.ts";
@@ -38,6 +39,8 @@ ${program.map((p) => `    <string>${escapeXml(p)}</string>`).join("\n")}
   <dict>
     <key>AUTOED_HOME</key><string>${escapeXml(paths.home)}</string>
     <key>HOME</key><string>${escapeXml(homedir())}</string>
+    <key>USER</key><string>${escapeXml(loginUser() ?? "")}</string>
+    <key>LOGNAME</key><string>${escapeXml(loginUser() ?? "")}</string>
     <key>PATH</key><string>${escapeXml(join(homedir(), ".local/bin") + ":/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin")}</string>
   </dict>
   <key>WorkingDirectory</key><string>${escapeXml(paths.home)}</string>
