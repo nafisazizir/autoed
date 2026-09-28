@@ -12,7 +12,8 @@ CREATE TABLE IF NOT EXISTS automations (
   mcp_config TEXT, timeout_sec INTEGER NOT NULL DEFAULT 3600, max_concurrent INTEGER NOT NULL DEFAULT 1,
   rate_limit_count INTEGER, rate_limit_window_sec INTEGER,
   catchup_policy TEXT NOT NULL DEFAULT 'coalesce', notify TEXT, metadata TEXT,
-  json_schema TEXT, add_dirs TEXT, sandbox INTEGER NOT NULL DEFAULT 0
+  json_schema TEXT, add_dirs TEXT, sandbox INTEGER NOT NULL DEFAULT 0,
+  chrome INTEGER NOT NULL DEFAULT 0, allowed_tools TEXT, disallowed_tools TEXT
 );
 CREATE TABLE IF NOT EXISTS triggers (
   id TEXT PRIMARY KEY, automation_id TEXT NOT NULL REFERENCES automations(id) ON DELETE CASCADE,
@@ -38,6 +39,12 @@ CREATE INDEX IF NOT EXISTS idx_runs_status ON runs(status);
 CREATE INDEX IF NOT EXISTS idx_runs_automation ON runs(automation_id, queued_at);
 CREATE TABLE IF NOT EXISTS settings ( key TEXT PRIMARY KEY, value TEXT );
 `;
+/** Additive column migrations for databases created before a column existed: [table, column, definition]. */
+const MIGRATIONS: Array<[string, string, string]> = [
+  ["automations", "chrome", "INTEGER NOT NULL DEFAULT 0"],
+  ["automations", "allowed_tools", "TEXT"],
+  ["automations", "disallowed_tools", "TEXT"],
+];
 
 export class Db {
   readonly sqlite: Database;
@@ -45,6 +52,13 @@ export class Db {
     this.sqlite = new Database(path, { create: true });
     this.sqlite.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;");
     this.sqlite.exec(SCHEMA);
+    this.migrate();
+  }
+  private migrate() {
+    for (const [table, col, def] of MIGRATIONS) {
+      const cols = this.sqlite.query<{ name: string }, []>(`PRAGMA table_info(${table})`).all();
+      if (!cols.some((c) => c.name === col)) this.sqlite.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
+    }
   }
   close() { this.sqlite.close(); }
 
@@ -123,6 +137,9 @@ export class Db {
     if (has("json_schema")) c.json_schema = jsonOrNull(input.json_schema);
     if (has("add_dirs")) c.add_dirs = input.add_dirs?.length ? JSON.stringify(input.add_dirs) : null;
     if (has("sandbox")) c.sandbox = input.sandbox ? 1 : 0;
+    if (has("chrome")) c.chrome = input.chrome ? 1 : 0;
+    if (has("allowed_tools")) c.allowed_tools = toolList(input.allowed_tools, "allowed_tools");
+    if (has("disallowed_tools")) c.disallowed_tools = toolList(input.disallowed_tools, "disallowed_tools");
     return c;
   }
 
@@ -232,6 +249,12 @@ export class Db {
 function req<T>(v: T | undefined | null, name: string): T {
   if (v === undefined || v === null || (typeof v === "string" && v.trim() === "")) throw new Error(`${name} is required`);
   return v;
+}
+function toolList(v: unknown, name: string): string | null {
+  if (v === undefined || v === null) return null;
+  if (!Array.isArray(v) || v.some((t) => typeof t !== "string")) throw new Error(`${name} must be an array of strings`);
+  const tools = v.map((t: string) => t.trim()).filter(Boolean);
+  return tools.length ? JSON.stringify(tools) : null;
 }
 function jsonOrNull(v: unknown): string | null {
   if (v === undefined || v === null || v === "") return null;

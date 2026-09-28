@@ -118,6 +118,9 @@ Binary lookup order: `config` → `PATH` → `~/.local/bin` → `/opt/homebrew/b
   "json_schema": null,                 // claude only, structured output
   "add_dirs": [],                      // claude only
   "sandbox": false,                    // devin only
+  "chrome": false,                     // claude only, --chrome (Claude in Chrome: drives your real browser)
+  "allowed_tools": [],                 // claude only, --allowedTools rules, e.g. "Bash(git log:*)"
+  "disallowed_tools": [],              // claude only, --disallowedTools rules, e.g. "Bash(gh pr merge:*)"
   "triggers": [
     { "kind": "schedule", "config": { "cron": "0 9 * * 1-5", "tz": "Australia/Sydney" } },
     { "kind": "webhook" },

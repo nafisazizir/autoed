@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Database } from "bun:sqlite";
 import { Db } from "../src/db.ts";
 
 function withDb(fn: (db: Db, dir: string) => void) { const dir = mkdtempSync(join(tmpdir(), "autoed-test-")); const db = new Db(join(dir, "t.db")); try { fn(db, dir); } finally { db.close(); rmSync(dir, { recursive: true, force: true }); } }
@@ -39,4 +40,28 @@ describe("db", () => {
     db.deleteAutomation(a.id);
     expect(db.getRun(r1.id)).toBeNull(); // cascades
   }));
+});
+
+describe("db claude cli options", () => {
+  test("stores chrome and tool lists, validates types", () => withDb((db, dir) => {
+    const a = db.createAutomation({ name: "t", backend: "claude", instructions: "", working_dir: dir, chrome: true, allowed_tools: ["Read", " "], disallowed_tools: ["Bash(gh pr merge:*)"] });
+    expect(a.chrome).toBe(1); expect(JSON.parse(a.allowed_tools!)).toEqual(["Read"]); expect(JSON.parse(a.disallowed_tools!)).toEqual(["Bash(gh pr merge:*)"]);
+    const b = db.updateAutomation(a.id, { chrome: false, allowed_tools: [] });
+    expect(b.chrome).toBe(0); expect(b.allowed_tools).toBeNull(); expect(b.disallowed_tools).not.toBeNull();
+    expect(() => db.updateAutomation(a.id, { disallowed_tools: "Edit" as any })).toThrow(/array of strings/);
+  }));
+  test("migrates databases created before the columns existed", () => {
+    const dir = mkdtempSync(join(tmpdir(), "autoed-test-")); const p = join(dir, "old.db");
+    try {
+      const old = new Database(p);
+      old.exec("CREATE TABLE automations (id TEXT PRIMARY KEY, name TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, backend TEXT NOT NULL, model TEXT, agent_mode TEXT, agent_profile TEXT, instructions TEXT NOT NULL DEFAULT '', working_dir TEXT NOT NULL, isolate_worktree INTEGER NOT NULL DEFAULT 0, continue_session INTEGER NOT NULL DEFAULT 0, mcp_config TEXT, timeout_sec INTEGER NOT NULL DEFAULT 3600, max_concurrent INTEGER NOT NULL DEFAULT 1, rate_limit_count INTEGER, rate_limit_window_sec INTEGER, catchup_policy TEXT NOT NULL DEFAULT 'coalesce', notify TEXT, metadata TEXT, json_schema TEXT, add_dirs TEXT, sandbox INTEGER NOT NULL DEFAULT 0)");
+      old.exec(`INSERT INTO automations (id, name, created_at, updated_at, backend, working_dir) VALUES ('a1', 'old', 'x', 'x', 'claude', '${dir}')`);
+      old.close();
+      const db = new Db(p); new Db(p).close(); // second open is a no-op
+      const a = db.getAutomation("a1")!;
+      expect(a.chrome).toBe(0); expect(a.allowed_tools).toBeNull(); expect(a.disallowed_tools).toBeNull();
+      expect(db.updateAutomation("a1", { chrome: true }).chrome).toBe(1);
+      db.close();
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
 });
