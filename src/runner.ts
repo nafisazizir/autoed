@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { createWriteStream, existsSync, mkdirSync, type WriteStream } from "node:fs";
 import { join } from "node:path";
+import { holdAwake } from "./awake.ts";
 import type { Backend, BuildContext } from "./backends/index.ts";
 import type { Automation, Run } from "./types.ts";
 
@@ -25,6 +26,7 @@ const MAX_CAPTURE = 4 * 1024 * 1024; // keep the last 4 MB of each stream in mem
 /** Spawns the backend process in its own process group, tees output to disk, enforces the timeout. */
 export async function startRun(opts: {
   backend: Backend; run: Run; automation: Automation; prompt: string; runDir: string; resumeSessionId: string | null;
+  preventSleep?: boolean;
   onStarted: (pid: number, argv: string[]) => void;
 }): Promise<{ handle: LiveHandle; done: Promise<RunOutcome>; ctx: BuildContext }> {
   const { backend, run, automation, prompt, runDir } = opts;
@@ -72,11 +74,13 @@ export async function startRun(opts: {
     setTimeout(() => { if (child.exitCode === null && child.signalCode === null) killTree("SIGKILL"); }, 10000).unref();
   };
   const timer = setTimeout(() => cancel("timed_out"), automation.timeout_sec * 1000);
+  const releaseAwake = opts.preventSleep && child.pid ? holdAwake(child.pid) : () => {};
 
   const done = new Promise<RunOutcome>((resolve) => {
     child.on("error", (e) => { stderr += `\n[autoed] spawn error: ${e.message}\n`; });
     child.on("close", (code, signal) => {
       clearTimeout(timer);
+      releaseAwake();
       outFile.end(); errFile.end();
       resolve({ exitCode: code, signal, timedOut, cancelled, stdout, stderr, warnings });
     });

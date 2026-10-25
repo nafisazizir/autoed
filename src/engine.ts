@@ -192,7 +192,7 @@ export class Engine extends EventEmitter {
       const prompt = renderPrompt(a.instructions, { run, automation: a, event, trigger });
       const resumeSessionId = a.continue_session ? this.db.lastSuccessfulSession(a.id) : null;
       const { handle, done, ctx } = await startRun({
-        backend, run, automation: a, prompt, runDir, resumeSessionId,
+        backend, run, automation: a, prompt, runDir, resumeSessionId, preventSleep: this.cfg.preventSleep,
         onStarted: (pid, argv) => { this.db.updateRun(run.id, { status: "running", pid }); this.emit("run", this.db.getRun(run.id)!); this.log(`run ${run.id} (${a.name}) started pid=${pid}: ${argv.slice(0, 3).join(" ")} …`); },
       });
       this.live.set(run.id, handle);

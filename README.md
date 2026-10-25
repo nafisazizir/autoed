@@ -90,9 +90,12 @@ Everything lives under `~/.autoed/` (override the whole directory with `AUTOED_H
   "notifications": { "macos": true, "webhook": { "url": "https://ntfy.sh/topic", "template": "ntfy" } },
   "claude": { "binary": null, "models": ["opus", "sonnet", "haiku"], "defaultModel": "sonnet" },
   "devin": { "binary": null, "defaultModel": "swe-2-high" },
-  "logRetentionDays": 30
+  "logRetentionDays": 30,
+  "preventSleep": true
 }
 ```
+
+`preventSleep` (default `true`, macOS only) holds a `caffeinate -i -s -w <pid>` assertion while each run is active. A run that starts during a maintenance wake can't be frozen by sleep partway through and then killed at its wall-clock timeout. The assertion ends when the run's process exits.
 
 Binary lookup order: `config` → `PATH` → `~/.local/bin` → `/opt/homebrew/bin` → `/usr/local/bin` → npm global bin (Claude) → bundled CLI inside Devin.app (Devin, located via `/Applications`, `~/Applications`, or Spotlight).
 
