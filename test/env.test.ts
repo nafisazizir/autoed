@@ -16,3 +16,19 @@ describe("scrubbedEnv", () => {
     expect(run({ HOME: process.env.HOME!, PATH: "/usr/bin:/bin", USER: "someone" }).USER).toBe("someone");
   });
 });
+
+describe("standardPath", () => {
+  test("includes per-user toolchain bins even when the parent PATH is minimal (launchd)", () => {
+    const home = process.env.HOME!;
+    const parts: string[] = run({ HOME: home, PATH: "/usr/bin:/bin" }).PATH.split(":");
+    for (const d of [".local/bin", ".bun/bin", ".cargo/bin", ".deno/bin"]) expect(parts).toContain(join(home, d));
+    expect(parts).toContain("/opt/homebrew/bin");
+  });
+  test("keeps inherited PATH entries after the standard ones, without duplicates", () => {
+    const home = process.env.HOME!;
+    const parts: string[] = run({ HOME: home, PATH: `/custom/bin:/usr/bin:${join(home, ".bun", "bin")}` }).PATH.split(":");
+    expect(parts).toContain("/custom/bin");
+    expect(parts.indexOf("/custom/bin")).toBeGreaterThan(parts.indexOf("/usr/bin"));
+    expect(new Set(parts).size).toBe(parts.length);
+  });
+});
