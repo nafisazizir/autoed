@@ -14,6 +14,8 @@ export interface Config {
   claude: { binary?: string; models?: string[]; defaultModel?: string };
   devin: { binary?: string; defaultModel?: string };
   logRetentionDays: number;
+  /** macOS: hold a caffeinate assertion while a run is active so sleep can't freeze it. */
+  preventSleep: boolean;
 }
 
 export const DEFAULT_CONFIG: Config = {
@@ -27,6 +29,7 @@ export const DEFAULT_CONFIG: Config = {
   claude: { models: ["opus", "sonnet", "haiku"], defaultModel: "sonnet" },
   devin: { defaultModel: "swe-2-high" },
   logRetentionDays: 30,
+  preventSleep: true,
 };
 
 export interface Paths {
