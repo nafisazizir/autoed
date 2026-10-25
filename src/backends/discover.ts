@@ -11,6 +11,9 @@ export function standardPath(): string {
   const home = homedir();
   const parts = [
     join(home, ".local", "bin"),
+    // Per-user toolchain installers (bun, cargo, deno) put binaries here and only add them to
+    // PATH in interactive shell rc files, which agent sessions never source.
+    join(home, ".bun", "bin"), join(home, ".cargo", "bin"), join(home, ".deno", "bin"),
     "/opt/homebrew/bin", "/opt/homebrew/sbin",
     "/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin",
   ];
